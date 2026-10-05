@@ -1,7 +1,5 @@
 <h1>
-<p align="center">
-<a href="https://github.com/GnomeShift/OpenVPN-pipeline" target="_blank" rel="noopener noreferrer">OpenVPN-pipeline</a>
-</p>
+<p align="center">OpenVPN-pipeline</p>
 </h1>
 
 # 🌐 Overview
