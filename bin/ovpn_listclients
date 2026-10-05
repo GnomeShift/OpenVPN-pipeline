@@ -58,3 +58,24 @@ for path in "${certs[@]}"; do
     echo "$name,$begin,$end,$status"
   fi
 done
+
+# easy-rsa's revoke() moves issued/<cn>.crt to revoked/certs_by_serial/<serial>.crt
+# so the glob above no longer sees revoked certificates
+shopt -s nullglob
+revoked_certs=(revoked/certs_by_serial/*.crt)
+shopt -u nullglob
+
+for path in "${revoked_certs[@]}"; do
+    subject=$(openssl x509 -noout -subject -in "$path" 2>/dev/null) || continue
+    # easy-rsa default DN is CN-only, cut guards against multi-RDN subjects anyway
+    name=$(printf '%s\n' "$subject" | sed -n 's/^.*CN[[:space:]]*=[[:space:]]*//p' | cut -d, -f1)
+    [ -n "$name" ] || continue
+    [ "$name" != "$OVPN_CN" ] || continue
+    # A live re-issued certificate with the same CN
+    # supersedes the archived revoked one in this status table.
+    [ -f "issued/$name.crt" ] && continue
+
+    begin=$(openssl x509 -noout -startdate -in "$path" | awk -F= '{ print $2 }')
+    end=$(openssl x509 -noout -enddate -in "$path" | awk -F= '{ print $2 }')
+    echo "$name,$begin,$end,REVOKED"
+done

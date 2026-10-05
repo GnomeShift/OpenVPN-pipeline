@@ -420,7 +420,7 @@ done
   process_push_config "$i"
 done
 
-echo -e "\n### Push" >> "$conf"
+echo -e "\n## Push" >> "$conf"
 cat "$TMP_PUSH_CONFIGFILE" >> "$conf"
 
 # Append extra server configurations

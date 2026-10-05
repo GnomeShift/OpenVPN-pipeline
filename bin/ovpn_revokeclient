@@ -33,10 +33,22 @@ if [ ! -f "$EASYRSA_PKI/private/${cn}.key" ]; then
   exit 1
 fi
 
+# easy-rsa 3.2.x: "revoke" is deprecated and only runs in batch mode
+# so easy-rsa's own confirmation is bypassed
+# Keep an explicit confirmation for interactive sessions instead
+if [ -t 0 ]; then
+  printf 'Revoke certificate "%s"? [y/N] ' "$cn"
+  read -r answer || answer=""
+  case "$answer" in
+  y|Y|yes|YES) ;;
+  *) echo "Aborted." >&2; exit 1 ;;
+  esac
+fi
+
 revoke_client_certificate(){
-  easyrsa revoke "$1"
+  EASYRSA_BATCH=1 easyrsa revoke "$1"
   echo "Generating the Certificate Revocation List :"
-  easyrsa gen-crl
+  EASYRSA_BATCH=1 easyrsa gen-crl
   cp -f "$EASYRSA_PKI/crl.pem" "$OPENVPN/crl.pem"
   chmod 644 "$OPENVPN/crl.pem"
 }
