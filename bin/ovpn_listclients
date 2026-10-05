@@ -1,0 +1,60 @@
+#!/bin/bash
+
+if [ -z "${OPENVPN:-}" ]; then
+  export OPENVPN="$PWD"
+fi
+if ! source "$OPENVPN/ovpn_env.sh"; then
+  echo "Could not source $OPENVPN/ovpn_env.sh."
+  exit 1
+fi
+if [ -z "${EASYRSA_PKI:-}" ]; then
+  export EASYRSA_PKI="$OPENVPN/pki"
+fi
+
+cd "$EASYRSA_PKI" || exit 1
+
+if [ -e crl.pem ]; then
+  # OpenSSL >= 1.0.0 can take the CRL separately so no scratch file needed
+  crl_check=(-crl_check -CRLfile crl.pem)
+else
+  # Without a CRL present, -crl_check would mark every certificate as
+  # invalid, so verify without it
+  crl_check=()
+fi
+
+echo "name,begin,end,status"
+
+shopt -s nullglob
+certs=(issued/*.crt)
+shopt -u nullglob
+
+for path in "${certs[@]}"; do
+  begin=$(openssl x509 -noout -startdate -in "$path" | awk -F= '{ print $2 }')
+  end=$(openssl x509 -noout -enddate -in "$path" | awk -F= '{ print $2 }')
+
+  name=${path%.crt}
+  name=${name#issued/}
+  if [ "$name" != "$OVPN_CN" ]; then
+    # check for revocation or expiration
+    # OpenSSL >= 3.0 prints verify diagnostics on stderr and adds a
+    # trailing "error <file>: verification failed" line, so capture both
+    # streams and pick the "error NN at N depth lookup" line explicitly
+    result=$(openssl verify "${crl_check[@]}" -CAfile ca.crt "$path" 2>&1)
+    if echo "$result" | grep -q ': OK$'; then
+      status="VALID"
+    else
+      result=$(echo "$result" | grep -oE 'error [0-9]+ at [0-9]+ depth lookup' | tail -n 1 | cut -d' ' -f2)
+      case $result in
+      10)
+        status="EXPIRED"
+        ;;
+      23)
+        status="REVOKED"
+        ;;
+      *)
+        status="INVALID"
+      esac
+    fi
+    echo "$name,$begin,$end,$status"
+  fi
+done

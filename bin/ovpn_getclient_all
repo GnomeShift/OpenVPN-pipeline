@@ -1,0 +1,39 @@
+#!/bin/bash
+## @licence MIT <http://opensource.org/licenses/MIT>
+## @author Copyright (C) 2015 Robin Schneider <ypid@riseup.net>
+# Modifications Copyright (C) 2026 GnomeShift
+
+set -e
+
+if [ -z "${OPENVPN:-}" ]; then
+  export OPENVPN="$PWD"
+fi
+if ! source "$OPENVPN/ovpn_env.sh"; then
+  echo "Could not source $OPENVPN/ovpn_env.sh."
+  exit 1
+fi
+if [ -z "${EASYRSA_PKI:-}" ]; then
+  export EASYRSA_PKI="$OPENVPN/pki"
+fi
+
+pushd "$EASYRSA_PKI" || exit 1
+
+shopt -s nullglob
+certs=(issued/*.crt)
+shopt -u nullglob
+
+if [ ${#certs[@]} -eq 0 ]; then
+  echo "No client certificates found in $EASYRSA_PKI/issued" >&2
+  popd || exit 1
+  exit 0
+fi
+
+for name in "${certs[@]}"; do
+  name=${name%.crt}
+  name=${name#issued/}
+  if [ "$name" != "$OVPN_CN" ]; then
+    ovpn_getclient "$name" separated
+    ovpn_getclient "$name" combined-save
+  fi
+done
+popd || exit 1
