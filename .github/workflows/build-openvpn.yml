@@ -6,7 +6,7 @@ on:
       docker_image_name:
         description: 'Docker image name'
         required: true
-        default: 'openvpn'
+        default: 'openvpn-test'
 
 jobs:
   build-and-push:
