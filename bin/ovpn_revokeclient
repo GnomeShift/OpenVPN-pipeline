@@ -40,8 +40,8 @@ if [ -t 0 ]; then
   printf 'Revoke certificate "%s"? [y/N] ' "$cn"
   read -r answer || answer=""
   case "$answer" in
-  y|Y|yes|YES) ;;
-  *) echo "Aborted." >&2; exit 1 ;;
+    y|Y|yes|YES) ;;
+    *) echo "Aborted" >&2; exit 1 ;;
   esac
 fi
 
@@ -54,4 +54,4 @@ revoke_client_certificate(){
 }
 
 revoke_client_certificate "$cn"
-echo "Done. Restart the container to apply the new CRL."
+echo "Done. An already connected client is dropped after the next reneg or server restart"

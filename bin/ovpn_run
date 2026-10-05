@@ -13,6 +13,9 @@ set -e
 if [ -z "${OPENVPN:-}" ]; then
   export OPENVPN="$PWD"
 fi
+if [ -z "${EASYRSA_PKI:-}" ]; then
+    export EASYRSA_PKI="$OPENVPN/pki"
+fi
 
 cd "$OPENVPN"
 
@@ -91,10 +94,16 @@ fi
 
 if [ -r "$OPENVPN/crl.pem" ]; then
   addArg "--crl-verify" "$OPENVPN/crl.pem"
+    if [ ! -f "$EASYRSA_PKI/crl.pem" ]; then
+      echo "Warning: $EASYRSA_PKI/crl.pem is missing, using the existing copy at $OPENVPN/crl.pem" >&2
+    fi
+else
+    echo "Error: no readable CRL found ($EASYRSA_PKI/crl.pem / $OPENVPN/crl.pem)." >&2
+    echo "Refusing to start without --crl-verify. Run ovpn_initpki first." >&2
+    exit 1
 fi
 
-ip -6 route show default 2>/dev/null
-if [ $? = 0 ]; then
+if ip -6 route show default 2>/dev/null; then
   echo "Checking IPv6 Forwarding"
   if [ "$(</proc/sys/net/ipv6/conf/all/disable_ipv6)" != "0" ]; then
     echo "Sysctl error for disable_ipv6, please run docker with '--sysctl net.ipv6.conf.all.disable_ipv6=0'"
