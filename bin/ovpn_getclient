@@ -110,6 +110,7 @@ case "$parm" in
 "combined-save")
   mkdir -p "$dir"
   get_client_config "combined" > "$dir/${cn}-combined.ovpn"
+  chmod 600 "$dir/${cn}-combined.ovpn"
   ;;
 *)
   echo "This script can produce the client configuration in two formats:" >&2
