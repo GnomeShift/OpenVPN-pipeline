@@ -15,7 +15,7 @@ if ! source "$OPENVPN/ovpn_env.sh"; then
 fi
 
 if [ -z "${OVPN_CN:-}" ]; then
-  echo "OVPN_CN is empty - is $OPENVPN/ovpn_env.sh valid?" >&2
+  echo "OVPN_CN is empty, is $OPENVPN/ovpn_env.sh valid?" >&2
   exit 1
 fi
 
@@ -42,7 +42,7 @@ if [ -f "${OPENVPN}/pki/crl.pem" ]; then
     FILES+=("pki/crl.pem")
 fi
 
-# Ensure the ccd directory exists in the source tree, even if empty
+# Ensure the ccd directory exists, even if empty
 mkdir -p "${OPENVPN}/ccd"
 
 # rsync isn't available to keep size down

@@ -14,7 +14,7 @@ if [ -z "${OPENVPN:-}" ]; then
   export OPENVPN="$PWD"
 fi
 if ! source "$OPENVPN/ovpn_env.sh"; then
-  echo "Could not source $OPENVPN/ovpn_env.sh. Run ovpn_genconfig first." >&2
+  echo "Could not source $OPENVPN/ovpn_env.sh. Run ovpn_genconfig first" >&2
   exit 1
 fi
 if [ -z "${EASYRSA_PKI:-}" ]; then
