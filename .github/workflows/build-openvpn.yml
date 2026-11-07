@@ -6,19 +6,114 @@ on:
       docker_image_name:
         description: 'Docker image name'
         required: true
+        type: string
         default: 'openvpn-test'
+      openvpn_version:
+        description: 'Upstream OpenVPN version to build'
+        required: true
+        type: string
+        default: 'latest'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openvpn-image-${{ inputs.docker_image_name }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-push:
-    name: 'Build and push OpenVPN'
+  resolve-version:
+    name: 'Resolve OpenVPN version'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      image: ${{ steps.validate.outputs.image }}
+    steps:
+      - name: 'Validate inputs and image name'
+        id: validate
+        env:
+          IMAGE_NAME: ${{ inputs.docker_image_name }}
+          DOCKERHUB_LOGIN: ${{ vars.DOCKERHUB_LOGIN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DOCKERHUB_LOGIN" ]] || {
+            echo '::error::DOCKERHUB_LOGIN repository variable is not set.' >&2
+            exit 1
+          }
+          [[ "$DOCKERHUB_LOGIN" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || {
+            echo "::error::DOCKERHUB_LOGIN '${DOCKERHUB_LOGIN}' is not a valid Docker Hub username." >&2
+            exit 1
+          }
+          [[ "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || {
+            echo "::error::docker_image_name must be a single lowercase Docker Hub repository name." >&2
+            exit 1
+          }
+          echo "image=${DOCKERHUB_LOGIN}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
 
+      # TODO: check regexes above
+      - name: 'Resolve version'
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.openvpn_version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          API=https://api.github.com/repos/OpenVPN/openvpn
+
+          if [ -z "$INPUT_VERSION" ] || [ "$INPUT_VERSION" = "latest" ]; then
+            VERSION=$(curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              "${API}/releases/latest" | jq -er '.tag_name | sub("^v";"")')
+          else
+            VERSION="${INPUT_VERSION#v}"
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "::error::openvpn_version must be x.y.z or 'latest', got '${INPUT_VERSION}'." >&2
+              exit 1
+            }
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              "${API}/releases/tags/v${VERSION}" | jq -er .tag_name >/dev/null || {
+              echo "::error::No OpenVPN release for v${VERSION}." >&2
+              exit 1
+            }
+          fi
+
+          URL="https://swupdate.openvpn.net/community/releases/openvpn-${VERSION}.tar.gz"
+          CODE=$(curl -so /dev/null -w '%{http_code}' "$URL")
+          [ "$CODE" = "200" ] || {
+            echo "::error::No release archive at ${URL} (${CODE})." >&2
+            exit 1
+          }
+          SIG=$(curl -sLo /dev/null -w '%{http_code}' "${URL}.asc")
+          [ "$SIG" = "200" ] || {
+            echo "::error::No detached signature for openvpn-${VERSION} (${SIG})." >&2
+            exit 1
+          }
+
+          echo "Resolved OpenVPN ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    name: 'Build and push OpenVPN'
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      OPENVPN_VERSION: ${{ needs.resolve-version.outputs.version }}
+      IMAGE: ${{ needs.resolve-version.outputs.image }}
+      CACHE_SCOPE: openvpn-${{ needs.resolve-version.outputs.version }}-${{ github.ref_name }}
     steps:
       - name: 'Checkout code'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: 'Setup QEMU'
         uses: docker/setup-qemu-action@v4
@@ -26,57 +121,113 @@ jobs:
       - name: 'Setup Docker Buildx'
         uses: docker/setup-buildx-action@v4
 
+      - name: 'Build and test'
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --pull \
+            --platform linux/amd64 \
+            --target test \
+            --build-arg "OPENVPN_VERSION=${OPENVPN_VERSION}" \
+            --load \
+            --tag "openvpn-ci-test:${GITHUB_RUN_ID}" \
+            .
+          docker run --rm "openvpn-ci-test:${GITHUB_RUN_ID}" openvpn --version
+
       - name: 'Login to Docker Hub'
-        uses: docker/login-action@v4.1.0
+        uses: docker/login-action@v4
         with:
           username: ${{ vars.DOCKERHUB_LOGIN }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: 'Build inspector image and get latest OpenVPN version'
-        id: get_version
-        run: |
-          INSPECTOR_IMAGE="openvpn-inspector:${{ github.run_id }}"
-          docker build . -t "$INSPECTOR_IMAGE"
-
-          OPENVPN_VERSION_STRING=$(docker run --rm "$INSPECTOR_IMAGE" openvpn --version | head -n 1)
-          OPENVPN_VERSION=$(echo "$OPENVPN_VERSION_STRING" | awk '{print $2}')
-          
-          if [[ -z "$OPENVPN_VERSION" ]]; then
-            echo "::error::Could not determine OpenVPN version."
-            exit 1
-          fi
-
-          echo "Detected OpenVPN version: $OPENVPN_VERSION"
-          echo "OPENVPN_VERSION=$OPENVPN_VERSION" >> $GITHUB_ENV
-
-      - name: 'Set image name and tags'
-        id: set_tags
-        run: |
-          IMAGE_NAME="${{ vars.DOCKERHUB_LOGIN }}/${{ github.event.inputs.docker_image_name }}"
-          TAGS="${IMAGE_NAME}:${{ env.OPENVPN_VERSION }}"
-          TAGS="$TAGS,${IMAGE_NAME}:latest"
-
-          echo "Tags: $TAGS"
-          echo "DOCKER_IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
-          echo "DOCKER_TAGS=${TAGS}" >> $GITHUB_ENV
+      - name: 'Docker image meta'
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ env.OPENVPN_VERSION }}
+            type=raw,value=latest
 
       - name: 'Build and push OpenVPN image'
-        uses: docker/build-push-action@v7.1.0
+        id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
+          pull: true
           push: true
-          tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            OPENVPN_VERSION=${{ env.OPENVPN_VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ env.CACHE_SCOPE }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE }},ignore-error=true
+          provenance: mode=max
+          sbom: true
 
       - name: 'Summary'
+        if: always()
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          echo "## ✅ OpenVPN image build complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **OpenVPN version:** \`${{ env.OPENVPN_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image:** \`${{ env.DOCKER_IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "  - \`${{ env.DOCKER_IMAGE_NAME }}:${{ env.OPENVPN_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "  - \`${{ env.DOCKER_IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## ✅ OpenVPN image build complete"
+            echo
+            echo "- **OpenVPN version:** ${OPENVPN_VERSION}"
+            echo "- **Image:** ${IMAGE}"
+            echo "- **Digest:** \`${DIGEST:-unknown}\`"
+            echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
+            echo "- **Tags:**"
+            printf '%s\n' "$TAGS" | sed 's/^/  - `/' | sed 's/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scan:
+    name: 'Vulnerability scan'
+    needs: build-and-push
+    if: always() && needs.build-and-push.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 'Trivy scan'
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ needs.resolve-version.outputs.image }}@${{ needs.build-and-push.outputs.digest }}
+          format: 'json'
+          output: 'trivy.json'
+          severity: 'LOW,MEDIUM,HIGH,CRITICAL'
+          exit-code: '0'
+
+      - name: 'Scan summary'
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "### 🛡️ Vulnerabilities"
+            echo
+            if [ -s trivy.json ] && jq -e . trivy.json >/dev/null 2>&1; then
+              TOTAL=$(jq '[.Results[]?.Vulnerabilities // [] | .[]] | length' trivy.json)
+              if [ "$TOTAL" -eq 0 ]; then
+                echo "✅ No findings"
+              else
+                echo "**Total findings: ${TOTAL}**"
+                echo
+                echo "| Severity | Found |"
+                echo "|:--|--:|"
+                jq -r '[.Results[]?.Vulnerabilities // [] | .[]] | group_by(.Severity)[] | "| \(.[0].Severity) | \(length) |"' trivy.json
+                echo
+                echo "| Severity | CVE | Package | Installed | Fixed in | Source |"
+                echo "|:--|:--|:--|:--|:--|:--|"
+                jq -r '.Results[]? as $r | ($r.Vulnerabilities // [])[] | "| \(.Severity) | \(.VulnerabilityID // "?") | \(.PkgName // "?") | \(.InstalledVersion // "?") | \(.FixedVersion // "-") | \($r.Class // "unknown") |"' trivy.json \
+                  | head -50
+              fi
+            else
+              echo "❌ Scan failed"
+            fi
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
