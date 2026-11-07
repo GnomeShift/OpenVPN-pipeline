@@ -52,7 +52,6 @@ jobs:
           }
           echo "image=${DOCKERHUB_LOGIN}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
 
-      # TODO: check regexes above
       - name: 'Resolve version'
         id: resolve
         env:
@@ -189,14 +188,14 @@ jobs:
             if [ -z "$DIGEST" ]; then
               echo "## ❌ OpenVPN image build failed"
               echo
-              echo "- **Requested version:** ${OPENVPN_VERSION}"
-              echo "- **Image:** ${IMAGE}"
+              echo "- **Requested version:** \`${OPENVPN_VERSION}\`"
+              echo "- **Image:** \`${IMAGE}\`"
               echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
             else
               echo "## ✅ OpenVPN image build complete"
               echo
-              echo "- **OpenVPN version:** ${OPENVPN_VERSION}"
-              echo "- **Image:** ${IMAGE}"
+              echo "- **OpenVPN version:** \`${OPENVPN_VERSION}\`"
+              echo "- **Image:** \`${IMAGE}\`"
               echo "- **Digest:** \`${DIGEST}\`"
               echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
               echo "- **Tags:**"
