@@ -15,7 +15,7 @@ ARG OPENVPN_SIGNING_FINGERPRINT
 WORKDIR /tmp/openvpn-build
 
 RUN set -eux; \
-    apk add --no-cache build-base curl gnupg libnl3-dev libcap-ng lz4-dev lzo-dev linux-headers openssl-dev pkg-config tar; \
+    apk add --no-cache build-base curl gnupg libnl3-dev libcap-ng-dev lz4-dev lzo-dev linux-headers openssl-dev tar; \
     printf '%s\n' "${OPENVPN_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { \
       echo "OPENVPN_VERSION must be x.y.z, got: ${OPENVPN_VERSION}" >&2; exit 1; }; \
     curl --fail --silent --show-error --retry 3 \
@@ -56,7 +56,7 @@ ARG OPENVPN_VERSION
 COPY --from=openvpn-build /stage/usr/sbin/openvpn /usr/sbin/openvpn
 
 RUN set -eux; \
-    apk add --no-cache bash easy-rsa iptables lz4-libs lzo openssl; \
+apk add --no-cache bash easy-rsa iproute2-minimal iptables libcap-ng libnl3 lz4-libs lzo openssl; \
     ln -s /usr/share/easy-rsa/easyrsa /usr/local/bin; \
     rm -rf /tmp/* /var/tmp/*; \
     if ldd /usr/sbin/openvpn 2>&1 | grep -q 'not found'; then \
