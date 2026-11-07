@@ -20,12 +20,13 @@ Pipeline for OpenVPN Docker images builds.
 2. Start pipeline via GitHub Actions.
 3. Specify build params (optional):
    - Docker image name (default: openvpn).
+   - Upstream OpenVPN version to build (default: latest).
 4. Click on `Run workflow` button.
 5. Done! You can view build summary on the pipeline page.
 
 <p align="center">
    <i>© GnomeShift 2026 - present</i><br>
-   <i>Licensed under <a href="https://github.com/GnomeShift/OpenVPN-pipeline/blob/HEAD/LICENSE">MIT</a></i><br><br>
+   <i>Licensed under <a href="https://github.com/GnomeShift/OpenVPN-pipeline/blob/HEAD/LICENSE">MIT</a></i><br>
    <i>Credits:</i><br>
    <i><a href="https://github.com/OpenVPN/openvpn/blob/master/COPYRIGHT.GPL">OpenVPN</a> licensed under GPL-2.0</i><br>
    <i><a href="https://github.com/kylemanna/docker-openvpn/blob/master/LICENSE">docker-openvpn</a> licensed under MIT</i>
