@@ -25,7 +25,7 @@ RUN set -eux; \
       "https://swupdate.openvpn.net/community/releases/openvpn-${OPENVPN_VERSION}.tar.gz.asc" \
       --output "openvpn-${OPENVPN_VERSION}.tar.gz.asc"; \
     curl --fail --silent --show-error --retry 3 \
-      "https://keys.openpgp.net/vks/v1/by-fingerprint/${OPENVPN_SIGNING_FINGERPRINT}" \
+      "https://keys.openpgp.org/vks/v1/by-fingerprint/${OPENVPN_SIGNING_FINGERPRINT}" \
       --output openvpn-signing-key.asc; \
     mkdir -m 0700 /tmp/gnupg; \
     export GNUPGHOME=/tmp/gnupg; \
@@ -35,6 +35,8 @@ RUN set -eux; \
     test "${ACTUAL_FINGERPRINT}" = "${OPENVPN_SIGNING_FINGERPRINT}" || { \
       echo "FATAL: fetched key is ${ACTUAL_FINGERPRINT}, expected ${OPENVPN_SIGNING_FINGERPRINT}" >&2; exit 1; }; \
     gpg --batch --verify "openvpn-${OPENVPN_VERSION}.tar.gz.asc" "openvpn-${OPENVPN_VERSION}.tar.gz"; \
+    tar -tzf "openvpn-${OPENVPN_VERSION}.tar.gz" >/dev/null || { \
+      echo "FATAL: archive is not a valid gzip tar" >&2; exit 1; }; \
     tar -xzf "openvpn-${OPENVPN_VERSION}.tar.gz"; \
     cd "openvpn-${OPENVPN_VERSION}"; \
     ./configure \
