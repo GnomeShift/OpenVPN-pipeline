@@ -15,7 +15,7 @@ ARG OPENVPN_SIGNING_FINGERPRINT
 WORKDIR /tmp/openvpn-build
 
 RUN set -eux; \
-    apk add --no-cache build-base curl gnupg libnl3-dev libcap-ng lz4-dev lzo-dev linux-headers openssl-dev tar; \
+    apk add --no-cache build-base curl gnupg libnl3-dev libcap-ng lz4-dev lzo-dev linux-headers openssl-dev pkg-config tar; \
     printf '%s\n' "${OPENVPN_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { \
       echo "OPENVPN_VERSION must be x.y.z, got: ${OPENVPN_VERSION}" >&2; exit 1; }; \
     curl --fail --silent --show-error --retry 3 \
