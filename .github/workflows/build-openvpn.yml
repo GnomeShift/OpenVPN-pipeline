@@ -206,7 +206,9 @@ jobs:
 
   scan:
     name: 'Vulnerability scan'
-    needs: build-and-push
+    needs:
+      - build-and-push
+      - resolve-version
     if: always() && needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
     permissions:
