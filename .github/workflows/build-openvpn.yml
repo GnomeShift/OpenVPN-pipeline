@@ -180,20 +180,28 @@ jobs:
           sbom: true
 
       - name: 'Summary'
-        if: always()
+        if: '!cancelled()'
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           {
-            echo "## ✅ OpenVPN image build complete"
-            echo
-            echo "- **OpenVPN version:** ${OPENVPN_VERSION}"
-            echo "- **Image:** ${IMAGE}"
-            echo "- **Digest:** \`${DIGEST:-unknown}\`"
-            echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
-            echo "- **Tags:**"
-            printf '%s\n' "$TAGS" | sed 's/^/  - `/' | sed 's/$/`/'
+            if [ -z "$DIGEST" ]; then
+              echo "## ❌ OpenVPN image build failed"
+              echo
+              echo "- **Requested version:** ${OPENVPN_VERSION}"
+              echo "- **Image:** ${IMAGE}"
+              echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
+            else
+              echo "## ✅ OpenVPN image build complete"
+              echo
+              echo "- **OpenVPN version:** ${OPENVPN_VERSION}"
+              echo "- **Image:** ${IMAGE}"
+              echo "- **Digest:** \`${DIGEST}\`"
+              echo "- **Cache scope:** \`${CACHE_SCOPE}\`"
+              echo "- **Tags:**"
+              printf '%s\n' "$TAGS" | sed 's/^/  - `/' | sed 's/$/`/'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   scan:
